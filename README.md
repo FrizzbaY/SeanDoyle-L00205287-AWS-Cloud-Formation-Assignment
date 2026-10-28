@@ -4,8 +4,7 @@ Assignment: AWS Cloud Foundations
 Module: IAC for DevOps Pipelines
 Tutor: Ruth Lennon.
 
-
-
+### Stage 1 ###
 
 - Constraint: New AWS accounts are region locked by default, so we must use eu-north-1.
 - Constraint: Tried to enable IAM Identity Center to enable Multifactor Authentication, but it is not allowed for free account.  
@@ -17,7 +16,7 @@ Upon creating my AWS account, I first had to secure the root account with multif
 
 Created IAM user sean-admin with AdministratorAccess Policy.  This way we can avoid permission errors, although a narrower policy of least privilege would be more secure typically
 - Constraint: Identity Center, IAM console access and root MFA were unavailable on a new Free Plan account, so I used an IAM user with an access key, which is a security trade-off. 
-- AWS recommends aws login and CloudShell as alternatives to access keys but they both depend on console sign in which we don't have acess to on the free tier, so both would have to run as the roo user.  I judged this to be a bigger security risk as the root users permissions could not be restricted, and has no MFA, whereas the access keys can be deleted and and the IAM user permission's can be reduced.  
+- AWS recommends aws login and CloudShell as alternatives to access keys but they both depend on console sign in which we don't have access to on the free tier, so both would have to run as the roo user.  I judged this to be a bigger security risk as the root users permissions could not be restricted, and has no MFA, whereas the access keys can be deleted and the IAM user permission's can be reduced.  
 - The key will be kept far outside the repository and deleted after the assignment. IAM user permissions can also be adjusted for the sean-admin account.  
 - I cannot stress enough that the access key is a compromise and not a benefit
  
@@ -35,3 +34,18 @@ and deleted the stack with `aws cloudformation describe-stacks --stack-name` onc
 
 Claude helped with the commands and finding CloudFormation documentation on the CLI commands: https://docs.aws.amazon.com/cli/latest/reference/cloudformation/ 
 I had Claude explain the test template and I recorded the prompts in [Prompts.md](Prompts.md)
+
+
+### Stage 2 - Upload index.html to the Bucket ###
+
+In stage 2 we will put the website page in the private S3 bucket from stage 1. The template only creates the bucket, so if we need to update the page, we can do that separately without needing to update the stack.   
+
+Now we need to create a page to put in our bucket. I don't do a lot of front-end development, so I will have Claude create a basic html file containing my student number, name, and a description for now. 
+
+- I'm going to change the colour of the text and the background colour because it is quite difficult to look at.
+
+I will upload to the bucket through AWS CLI instead of using the AWS S3 browser dashboard to avoid using the root user.  
+Upon Amazons recommendation, I am enabling bucket versioning through the CLI with `aws s3api get-bucket-versioning --bucket static-website-stack-sitebucket-xxxxxxxxxxx` which would allow me to recover any files that get overwritten in a bucket.  A precautionary measure that I think makes perfect sense.     
+
+- Amazon is giving me a few different options for storage but I will just go with the Standard storage class.  Standard storage class being designed for frequent access, which we will do through CloudFront, and there is no fees or minimum storage.  
+- 
