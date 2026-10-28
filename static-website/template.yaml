@@ -1,0 +1,23 @@
+# static-website/template.yaml
+# Stage 1: S3 private bucket test
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Stage 1 - private S3 bucket for static website content
+
+Resources:
+
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      # No BucketName on purpose: CloudFormation generates a unique name,
+      # so the deploy cannot fail because another account owns that name.
+
+      # Security: all four settings are true so the bucket cannot be made
+      # public by an ACL or a bucket policy. CloudFront will read the
+      # bucket through Origin Access Control, which does not need this
+      # to be relaxed.
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
