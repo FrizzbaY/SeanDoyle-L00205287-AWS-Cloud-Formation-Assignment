@@ -48,4 +48,8 @@ I will upload to the bucket through AWS CLI instead of using the AWS S3 browser 
 Upon Amazons recommendation, I am enabling bucket versioning through the CLI with `aws s3api get-bucket-versioning --bucket static-website-stack-sitebucket-xxxxxxxxxxx` which would allow me to recover any files that get overwritten in a bucket.  A precautionary measure that I think makes perfect sense.     
 
 - Amazon is giving me a few different options for storage but I will just go with the Standard storage class.  Standard storage class being designed for frequent access, which we will do through CloudFront, and there is no fees or minimum storage.  
-- 
+
+
+### Stage 3 - Host the Website with CloudFront ###
+CloudFront is AWS's Content Delivery Network, which is what we will be using to help make our bucket reachable to the public.  CloudFront provides HTTPS
+as a security measure, caches content close to visitors which helps performance, and caches our user requests to absorb traffic.  
