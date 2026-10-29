@@ -1,5 +1,4 @@
 # static-website/template.yaml
-# Stage 1: S3 private bucket test
 
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Static website - private S3 bucket served through CloudFront with Origin Access Control
@@ -14,7 +13,9 @@ Resources:
         IgnorePublicAcls: true
         BlockPublicPolicy: true
         RestrictPublicBuckets: true
-
+    # Keeps previous version of overwritten or deleted objects for recovery purposes
+      VersioningConfiguration:
+        Status: Enabled
 
   # Origin Access Control (OAC)
   SiteOriginAccessControl:
