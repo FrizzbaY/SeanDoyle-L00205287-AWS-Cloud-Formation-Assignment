@@ -18,4 +18,6 @@ Public Access settings to true. Add comments explaining each choice.
 7. I am ready to start the CloudFront stuff.  First tell me about CloudFront and its relevance to this project.  We have got the index.html stored in a bucket.  What is CloudFront going to do for us? What are the reasons to use CloudFront?
 8. What do I need to add to template.yaml to use CloudFront? 
 9. With the yaml updated, what is the next step? 
-10. The yaml was successfully validated, how do I proceed? 
+10. The yaml was successfully validated, how do I proceed?
+11. How do I empty an S3 Bucket and delete all the bucket versions through AWS CLI? Can you explain those commands?
+12. How do I get the CloudFront domain name?  

@@ -1,6 +1,6 @@
-# SeanDoyle-L00205287-AWS-Cloud-Foundations-Assignment
+# SeanDoyle-L00205287-AWS-Cloud-Formation-Assignment
 Repository of Sean Doyle - Student Number: L00205287
-Assignment: AWS Cloud Foundations
+Assignment: AWS Cloud Formation
 Module: IAC for DevOps Pipelines
 Tutor: Ruth Lennon.
 
@@ -30,7 +30,7 @@ Testing Template
 
 I ran `aws cloudformation deploy` to create the stack from static-website/template.yaml, then `aws cloudformation describe-stack-resources`
 to confirm the bucket was created, and checked the bucket access block was private with `aws s3api get-public-access-block --bucket name`, 
-and deleted the stack with `aws cloudformation describe-stacks --stack-name` once everything was confirmed to be working as intended.
+and deleted the stack with `aws cloudformation delete-stack --stack-name` once everything was confirmed to be working as intended.
 
 Claude helped with the commands and finding CloudFormation documentation on the CLI commands: https://docs.aws.amazon.com/cli/latest/reference/cloudformation/ 
 I had Claude explain the test template and I recorded the prompts in [Prompts.md](Prompts.md)
@@ -45,9 +45,9 @@ Now we need to create a page to put in our bucket. I don't do a lot of front-end
 - I'm going to change the colour of the text and the background colour because it is quite difficult to look at.
 
 I will upload to the bucket through AWS CLI instead of using the AWS S3 browser dashboard to avoid using the root user.  
-Upon Amazons recommendation, I am enabling bucket versioning through the CLI with `aws s3api get-bucket-versioning --bucket static-website-stack-sitebucket-xxxxxxxxxxx` which would allow me to recover any files that get overwritten in a bucket.  A precautionary measure that I think makes perfect sense.     
+Upon Amazons recommendation, I am enabling bucket versioning through the CLI with `aws s3api put-bucket-versioning --bucket static-website-stack-sitebucket-xxxxxxxxxxx --versioning-configuration Status=Enabled` which would allow me to recover any files that get overwritten in a bucket.  A precautionary measure that I think makes perfect sense.     
 
-- Amazon is giving me a few different options for storage but I will just go with the Standard storage class.  Standard storage class being designed for frequent access, which we will do through CloudFront, and there is no fees or minimum storage.  
+- Amazon is giving me a few different options for storage, but I will just go with the Standard storage class.  Standard storage class being designed for frequent access, which we will do through CloudFront, and there is no fees or minimum storage.  
 
 
 ### Stage 3 - Host the Website with CloudFront ###
@@ -70,5 +70,32 @@ Once again, the template was validated before continuing, and I ran the deployme
 
 Deployment went smoothly, everything up and running, checked to make sure the bucket still had public access blocked.  
 Using the Client URL command `curl --head https:xxxxxxx.cloudfront.net/` to fetch the HTTP response headers, I noticed that the X-Cache, which tells us
-how CloudFront handled the request, had an error from cloudfront, meaning cloudfront did not issue us the cached copy.  Upon running
-the curl command again this resolved itself, which makes sense as the S3 file would not have been cached until after the initial request.  
+how CloudFront handled the request, had a `Miss from cloudfront`, meaning cloudfront did not issue us the cached copy.  Upon running
+the curl command again this resolved itself with a `Hit from cloudfront`, which makes sense as the S3 file would not have been cached until after the initial request.  
+
+
+### Stage 4 - Clean State Verification ###
+It is time to make sure that the template alone can rebuild the whole site.  The first thing needed to do is
+to delete stack.  The stack does have version control though, so we need to empty all the versioned buckets as well before we delete the stack.  
+
+I initially enabled the version control through the AWS CLI, so I have to add it into the template.yaml to keep that settings enabled when redeploying in the future.
+I revalidate the template once again before continuing. 
+
+Claude helped me with the AWS CLI commands for deleting all the object versions and delete markers before we deleted the stack.  
+To delete the stack we used `aws cloudformation delete-stack --stack-name static-website-stack` and I checked the stack was deleted with `aws cloudformation describe-stacks --stack-name static-website-stack`.
+
+I now test deployment again and see if the changes to the template.yaml are working. - `aws cloudformation deploy --template-file static-website/template.yaml --stack-name static-website-stack`
+The deployment was successful, but the AWS Management Console is not available to check the resources, because the IAM user has no console access. Instead, the check was done through the AWS CLI. 
+The `describe-stack-resources` command lists each resource in the stack, and the ResourceStatus of CREATE_COMPLETE for each of the four resources confirms they were created.
+
+Our redeployed bucket is currently empty, and the values for the bucket name, distribution domain and distribution ID 
+will be different this time around. 
+
+We can see the BucketName on the S3 Buckets Dashboard or using `describe-stack-resources`, which we will need to upload the index.html to our Bucket.
+I run `aws s3 cp static-website/index.html s3://static-website-stack-sitebucket-new-template-name/index.html` and check the upload finished with `aws s3 ls s3://static-website-stack-sitebucket-new-template-name/`. 
+
+In that same output for `describe-stack-resources` we see the CloudFront distribution ID, and we can run `aws cloudfront get-distribution --id XXXXXXX` to get our CloudFront DomainName output. 
+`$ curl --head https://xxxxxxxxx.cloudfront.net/` returns Hit from Cloud on second request.  
+`get-public-access-block` still shows our Block Public Access is still all true.  
+
+The template alone rebuilt the whole site from a torn-down state. Looking up the new values by hand after every redeploy was slow, so the next improvement is an Outputs section in the template.
