@@ -68,3 +68,7 @@ CloudFront ARN (Amazon Resource Name).
 
 Once again, the template was validated before continuing, and I ran the deployment command again.  
 
+Deployment went smoothly, everything up and running, checked to make sure the bucket still had public access blocked.  
+Using the Client URL command `curl --head https:xxxxxxx.cloudfront.net/` to fetch the HTTP response headers, I noticed that the X-Cache, which tells us
+how CloudFront handled the request, had an error from cloudfront, meaning cloudfront did not issue us the cached copy.  Upon running
+the curl command again this resolved itself, which makes sense as the S3 file would not have been cached until after the initial request.  
