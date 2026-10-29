@@ -48,4 +48,27 @@ I will upload to the bucket through AWS CLI instead of using the AWS S3 browser 
 Upon Amazons recommendation, I am enabling bucket versioning through the CLI with `aws s3api get-bucket-versioning --bucket static-website-stack-sitebucket-xxxxxxxxxxx` which would allow me to recover any files that get overwritten in a bucket.  A precautionary measure that I think makes perfect sense.     
 
 - Amazon is giving me a few different options for storage but I will just go with the Standard storage class.  Standard storage class being designed for frequent access, which we will do through CloudFront, and there is no fees or minimum storage.  
-- 
+
+
+### Stage 3 - Host the Website with CloudFront ###
+CloudFront is AWS's Content Delivery Network, which is used to help make the bucket reachable to the public.  CloudFront provides HTTPS
+as a security measure, caches content close to visitors which helps performance, and caches our user requests to absorb traffic, which helps scalability.  
+
+If we want to use CloudFront to keep our bucket access private, then we need an OAC (Origin Access Control).  This lets CloudFront sign requests to S3,
+which verifies that they came from our website. Only our distribution can read which bumps up security.
+
+Claude helped me to generate the additional code for the CloudFront resources to be represented in the template.yaml file.  The next step was to validate the template with `aws cloudformation validate-template` 
+which runs checks on file prior to creating any resources.  Simple checks such as correct syntax and structure. 
+
+With a successful validation of the code, it was time to deploy through the CLI with `aws cloudformation deploy --template-file static-website/template.yaml --stack-name static-website-stack`.  
+
+When we tried to deploy, we got an error saying access denied with 403 error.  403 error indicating that the server understood the request but refused us. 
+S3 was not allowing CloudFront to read the S3 objects, so a site bucket policy needed to be made the yaml file, allowing read only access to the 
+CloudFront ARN (Amazon Resource Name).  
+
+Once again, the template was validated before continuing, and I ran the deployment command again.  
+
+Deployment went smoothly, everything up and running, checked to make sure the bucket still had public access blocked.  
+Using the Client URL command `curl --head https:xxxxxxx.cloudfront.net/` to fetch the HTTP response headers, I noticed that the X-Cache, which tells us
+how CloudFront handled the request, had an error from cloudfront, meaning cloudfront did not issue us the cached copy.  Upon running
+the curl command again this resolved itself, which makes sense as the S3 file would not have been cached until after the initial request.  

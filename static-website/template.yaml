@@ -2,22 +2,76 @@
 # Stage 1: S3 private bucket test
 
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Stage 1 - private S3 bucket for static website content
+Description: Static website - private S3 bucket served through CloudFront with Origin Access Control
 
 Resources:
 
   SiteBucket:
     Type: AWS::S3::Bucket
     Properties:
-      # No BucketName on purpose: CloudFormation generates a unique name,
-      # so the deploy cannot fail because another account owns that name.
-
-      # Security: all four settings are true so the bucket cannot be made
-      # public by an ACL or a bucket policy. CloudFront will read the
-      # bucket through Origin Access Control, which does not need this
-      # to be relaxed.
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         IgnorePublicAcls: true
         BlockPublicPolicy: true
         RestrictPublicBuckets: true
+
+
+  # Origin Access Control (OAC)
+  SiteOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-oac"
+        Description: Lets CloudFront read the private site bucket
+        OriginAccessControlOriginType: s3
+        # always: sign every request to the origin.
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # CloudFront distribution is the public-facing web service where visitors connect to index.html from the private bucket
+  SiteDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        # Returns index.html when a visitor requests the root path "/".
+        DefaultRootObject: index.html
+        Origins:
+          - Id: SiteBucketOrigin
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt SiteOriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: SiteBucketOrigin
+          # Performance: HTTP requests are redirected to HTTPS.
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+
+  # Bucket Policy allowing CloudFront to read from private S3 bucket.
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      # The bucket this policy is attached to.
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipalReadOnly
+            Effect: Allow
+            # Who is allowed access: CloudFront
+            Principal:
+              Service: cloudfront.amazonaws.com
+            # What is allowed: Reading objects only
+            Action: s3:GetObject
+            # Where: Every object in the bucket
+            Resource: !Sub "${SiteBucket.Arn}/*"
+            # Only when the request comes from this distribution, so no other
+            # CloudFront distribution can read the bucket.
+            Condition: # Applies if true
+              StringEquals: # Compares the value
+                # The single Amazon Resource Name allowed access the bucket
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SiteDistribution}"

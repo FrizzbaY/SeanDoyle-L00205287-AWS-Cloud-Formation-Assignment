@@ -15,3 +15,7 @@ Public Access settings to true. Add comments explaining each choice.
 5. How to upload html file to bucket through aws CLI? 
 
 6. I am being recommended to enable bucket versioning by Amazon, how could I enable this through AWS CLI commands? 
+7. I am ready to start the CloudFront stuff.  First tell me about CloudFront and its relevance to this project.  We have got the index.html stored in a bucket.  What is CloudFront going to do for us? What are the reasons to use CloudFront?
+8. What do I need to add to template.yaml to use CloudFront? 
+9. With the yaml updated, what is the next step? 
+10. The yaml was successfully validated, how do I proceed? 
