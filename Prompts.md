@@ -21,3 +21,4 @@ Public Access settings to true. Add comments explaining each choice.
 10. The yaml was successfully validated, how do I proceed?
 11. How do I empty an S3 Bucket and delete all the bucket versions through AWS CLI? Can you explain those commands?
 12. How do I get the CloudFront domain name?  
+13. What can you tell me about CloudFormation Outputs? 
