@@ -1,0 +1,296 @@
+# three-tier/template.yaml
+
+# Part 1B: three-tier architecture (web tier, application tier, database tier).
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Three-tier architecture - stage 1, network and security groups
+
+Parameters:
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: CIDR (Classless Inter-Domain Routing) range of the VPC (Virtual Private Cloud)
+
+Resources:
+
+  # ---------------------------------------------------------------------------
+  # Network
+  # ---------------------------------------------------------------------------
+
+  # The VPC is the isolated private network that holds every resource in this stack.
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      # Required so instances and the database can resolve each other's DNS (Domain Name System) names.
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "-vpc"
+
+  # The Internet Gateway is what makes a subnet "public": it connects the VPC to the internet.
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "-igw"
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  # Two subnets per tier, each in a different AZ (Availability Zone, a separate data centre
+  # location). The load balancer and the RDS (Relational Database Service) subnet group
+  # both require at least two AZs.
+  # Fn::Cidr splits VpcCidr into 6 blocks of 256 addresses (/24); !Select picks one by index.
+  # Indexes: 0-1 web tier, 2-3 application tier, 4-5 database tier.
+
+  # Web tier: public subnets (hold the load balancer and the NAT Gateway).
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Select [0, !Cidr [!Ref VpcCidr, 6, 8]]
+      Tags:
+        - Key: Name
+          Value: !Sub "-public-a"
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Select [1, !Cidr [!Ref VpcCidr, 6, 8]]
+      Tags:
+        - Key: Name
+          Value: !Sub "-public-b"
+
+  # Application tier: private subnets (no inbound route from the internet).
+  AppSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Select [2, !Cidr [!Ref VpcCidr, 6, 8]]
+      Tags:
+        - Key: Name
+          Value: !Sub "-app-a"
+
+  AppSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Select [3, !Cidr [!Ref VpcCidr, 6, 8]]
+      Tags:
+        - Key: Name
+          Value: !Sub "-app-b"
+
+  # Database tier: private subnets with no route to the internet at all (see DbRouteTable).
+  DbSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Select [4, !Cidr [!Ref VpcCidr, 6, 8]]
+      Tags:
+        - Key: Name
+          Value: !Sub "-db-a"
+
+  DbSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Select [5, !Cidr [!Ref VpcCidr, 6, 8]]
+      Tags:
+        - Key: Name
+          Value: !Sub "-db-b"
+
+  # ---------------------------------------------------------------------------
+  # Outbound internet for the application tier
+  # ---------------------------------------------------------------------------
+
+  # The application instances need outbound internet to install packages at launch.
+  # A NAT Gateway (Network Address Translation) allows outbound connections from private
+  # subnets while still refusing inbound connections from the internet.
+  # Decision: ONE NAT Gateway, not one per AZ. This is cheaper but is a single point of
+  # failure; a production design would use one per AZ. Billed per hour, so delete the
+  # stack after testing.
+  NatElasticIp:
+    Type: AWS::EC2::EIP
+    # The address cannot be used until the Internet Gateway is attached.
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatElasticIp.AllocationId
+      # A NAT Gateway must sit in a PUBLIC subnet.
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        - Key: Name
+          Value: !Sub "-nat"
+
+  # ---------------------------------------------------------------------------
+  # Route tables: these decide where each subnet's traffic can go
+  # ---------------------------------------------------------------------------
+
+  # Public: default route (0.0.0.0/0 means "any address") goes to the Internet Gateway.
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "-public-rt"
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  # Application: default route goes to the NAT Gateway (outbound only).
+  AppRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "-app-rt"
+
+  AppDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref AppRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  # Database: deliberately NO default route. The database can only talk to other
+  # addresses inside the VPC, so it cannot be reached from, or reach, the internet.
+  DbRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "-db-rt"
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
+  AppSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref AppSubnetA
+      RouteTableId: !Ref AppRouteTable
+
+  AppSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref AppSubnetB
+      RouteTableId: !Ref AppRouteTable
+
+  DbSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DbSubnetA
+      RouteTableId: !Ref DbRouteTable
+
+  DbSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DbSubnetB
+      RouteTableId: !Ref DbRouteTable
+
+  # ---------------------------------------------------------------------------
+  # Security groups: stateful firewalls, chained so each tier only accepts traffic
+  # from the tier directly above it
+  # ---------------------------------------------------------------------------
+
+  # Web tier (load balancer): accepts HTTP from anywhere.
+  # Limitation: HTTP only. HTTPS (Hypertext Transfer Protocol Secure) on a load balancer
+  # needs a certificate for a domain name, which this lab does not have.
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Load balancer - HTTP from the internet
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "-alb-sg"
+
+  # Application tier: accepts HTTP ONLY from the load balancer's security group.
+  # Referencing a security group instead of an IP range means this stays correct when
+  # instances are replaced or scaled.
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Application tier - HTTP from the load balancer only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "-app-sg"
+
+  # Database tier: accepts PostgreSQL (port 5432) ONLY from the application tier's
+  # security group. Nothing else, including the load balancer, can connect.
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Database tier - PostgreSQL from the application tier only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref AppSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "-db-sg"
+
+Outputs:
+  VpcId:
+    Description: ID of the VPC
+    Value: !Ref Vpc
+
+  LoadBalancerSecurityGroupId:
+    Description: Security group for the web tier
+    Value: !Ref LoadBalancerSecurityGroup
+
+  AppSecurityGroupId:
+    Description: Security group for the application tier
+    Value: !Ref AppSecurityGroup
+
+  DbSecurityGroupId:
+    Description: Security group for the database tier
+    Value: !Ref DbSecurityGroup
+
