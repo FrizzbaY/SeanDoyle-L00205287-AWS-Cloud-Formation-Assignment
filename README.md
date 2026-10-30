@@ -99,3 +99,22 @@ In that same output for `describe-stack-resources` we see the CloudFront distrib
 `get-public-access-block` still shows our Block Public Access is still all true.  
 
 The template alone rebuilt the whole site from a torn-down state. Looking up the new values by hand after every redeploy was slow, so the next improvement is an Outputs section in the template.
+
+
+### Stage 5 - Outputs Section ###
+
+After each redeploy I would have to up the bucket name, distribution ID and CloudFront domain name each time, which would have to be done manually each time, which is tedious and time-consuming.
+To remove these extra steps, I added an `Outputs` section to `static-website/template.yaml` to help facilitate the redeployment process. 
+
+`Outputs` is its own section, separate from `Resources` in template.yaml. When the stack deploys, CloudFormation will store the values, where I can then read all three values
+easily through a single query command: `aws cloudformation describe-stacks --stack-name static-website-stack --query "Stacks[0].Outputs" --output table`.  This CLI command could also be scripted to speed up the process further. 
+
+I added three outputs:
+
+- `BucketName` (used to upload `index.html`)
+- `DistributionId` (used for CloudFront CLI commands)
+- `SiteUrl` (the public HTTPS address of the website)
+
+
+I validated the template with `aws cloudformation validate-template`, redeployed with the same `aws cloudformation deploy` command as before,
+and read the three values with the query command above.

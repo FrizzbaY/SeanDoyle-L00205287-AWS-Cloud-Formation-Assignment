@@ -76,3 +76,16 @@ Resources:
               StringEquals: # Compares the value
                 # The single Amazon Resource Name allowed access the bucket
                 AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SiteDistribution}"
+
+Outputs:
+  BucketName:
+    Description: S3 bucket that holds the site content (used for uploading index.html)
+    Value: !Ref SiteBucket # For an S3 bucket, Ref returns the bucket name
+
+  DistributionId:
+    Description: CloudFront distribution ID (used for CLI commands such as get-distribution)
+    Value: !Ref SiteDistribution # For a distribution, Ref returns the distribution ID
+
+  SiteUrl:
+    Description: Public HTTPS address of the website
+    Value: !Sub "https://${SiteDistribution.DomainName}/"
