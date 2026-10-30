@@ -22,3 +22,9 @@ Public Access settings to true. Add comments explaining each choice.
 11. How do I empty an S3 Bucket and delete all the bucket versions through AWS CLI? Can you explain those commands?
 12. How do I get the CloudFront domain name?  
 13. What can you tell me about CloudFormation Outputs? 
+
+### 1B Prompts ### 
+
+1. What do we need to for a basic three tier architecture .taml file for CloudFormations? 
+2. Can you generate me a basic three tier architecture template.yaml file with a web tier, application tier, database tier? Just basics, no comments. 
+2. Generate the the web tier portion of the .yaml?
