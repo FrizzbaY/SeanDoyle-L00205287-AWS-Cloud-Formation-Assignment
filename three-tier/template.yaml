@@ -1,7 +1,7 @@
 # three-tier/template.yaml
 
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Three-tier architecture - network, security groups, database tier and application tier
+Description: Three-tier architecture - network, security groups, web tier, application tier and database tier
 
 # Parameters
 Parameters:
@@ -392,7 +392,9 @@ Resources:
 
   AppAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
-    DependsOn: AppDefaultRoute
+    DependsOn:
+      - AppDefaultRoute
+      - Listener
     Properties:
       VPCZoneIdentifier:
         - !Ref AppSubnetA
@@ -403,10 +405,60 @@ Resources:
       MinSize: "1"
       MaxSize: "2"
       DesiredCapacity: "1"
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 300
       Tags:
         - Key: Name
           Value: !Sub "${AWS::StackName}-app"
           PropagateAtLaunch: true
+
+  # Web tier
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Type: application
+      Scheme: internet-facing
+      IpAddressType: ipv4
+      Subnets:
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+      SecurityGroups:
+        - !Ref LoadBalancerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-alb"
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref Vpc
+      TargetType: instance
+      Protocol: HTTP
+      Port: 80
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: "200"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-tg"
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
 
 # Outputs
 Outputs:
@@ -433,3 +485,11 @@ Outputs:
   DbSecretArn:
     Description: ARN (Amazon Resource Name) of the Secrets Manager secret holding the database password
     Value: !GetAtt Database.MasterUserSecret.SecretArn
+
+  LoadBalancerDnsName:
+    Description: Public DNS (Domain Name System) name of the load balancer
+    Value: !GetAtt LoadBalancer.DNSName
+
+  SiteUrl:
+    Description: Public HTTP address of the application
+    Value: !Sub "http://${LoadBalancer.DNSName}/"
