@@ -1,7 +1,7 @@
 # three-tier/template.yaml
 
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Three-tier architecture - network, security groups, database tier and application tier
+Description: Three-tier architecture - network, security groups and database tier
 
 # Parameters
 Parameters:
@@ -24,16 +24,6 @@ Parameters:
     Type: String
     Default: appadmin
     Description: Master username of the database
-
-  AppInstanceType:
-    Type: String
-    Default: t3.micro
-    Description: EC2 (Elastic Compute Cloud) instance type for the application tier
-
-  AppAmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
-    Description: Latest Amazon Linux 2023 AMI (Amazon Machine Image), resolved from SSM (Systems Manager) Parameter Store
 
 Resources:
 
@@ -288,125 +278,6 @@ Resources:
       MultiAZ: false
       BackupRetentionPeriod: 1
       DeletionProtection: false
-
-  # Application tier
-  AppRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ec2.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: read-database-secret
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: secretsmanager:GetSecretValue
-                Resource: !GetAtt Database.MasterUserSecret.SecretArn
-
-  AppInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Roles:
-        - !Ref AppRole
-
-  AppLaunchTemplate:
-    Type: AWS::EC2::LaunchTemplate
-    Properties:
-      LaunchTemplateData:
-        ImageId: !Ref AppAmiId
-        InstanceType: !Ref AppInstanceType
-        IamInstanceProfile:
-          Arn: !GetAtt AppInstanceProfile.Arn
-        SecurityGroupIds:
-          - !Ref AppSecurityGroup
-        MetadataOptions:
-          HttpTokens: required
-          HttpEndpoint: enabled
-        UserData:
-          Fn::Base64: !Sub |
-            #!/bin/bash
-            dnf install -y python3-pip
-            pip3 install boto3 psycopg2-binary
-            mkdir -p /opt/app
-            cat > /opt/app/app.py <<'EOF'
-            import json
-            import boto3
-            import psycopg2
-            from http.server import BaseHTTPRequestHandler, HTTPServer
-
-            def query_database():
-                client = boto3.client("secretsmanager", region_name="${AWS::Region}")
-                secret = json.loads(client.get_secret_value(SecretId="${Database.MasterUserSecret.SecretArn}")["SecretString"])
-                connection = psycopg2.connect(
-                    host="${Database.Endpoint.Address}",
-                    dbname="${DbName}",
-                    user=secret["username"],
-                    password=secret["password"],
-                    connect_timeout=5,
-                )
-                cursor = connection.cursor()
-                cursor.execute("SELECT version()")
-                version = cursor.fetchone()[0]
-                connection.close()
-                return version
-
-            class Handler(BaseHTTPRequestHandler):
-                def do_GET(self):
-                    if self.path == "/health":
-                        body = "ok"
-                    else:
-                        try:
-                            body = "Database connection successful: " + query_database()
-                        except Exception as error:
-                            body = "Database connection failed: " + str(error)
-                    page = "<html><body><h1>L00205287 Sean Doyle</h1><p>" + body + "</p></body></html>"
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/html")
-                    self.end_headers()
-                    self.wfile.write(page.encode())
-
-            HTTPServer(("0.0.0.0", 80), Handler).serve_forever()
-            EOF
-            cat > /etc/systemd/system/app.service <<'EOF'
-            [Unit]
-            Description=Application tier web app
-            After=network-online.target
-
-            [Service]
-            ExecStart=/usr/bin/python3 /opt/app/app.py
-            DynamicUser=yes
-            AmbientCapabilities=CAP_NET_BIND_SERVICE
-            Restart=always
-
-            [Install]
-            WantedBy=multi-user.target
-            EOF
-            systemctl daemon-reload
-            systemctl enable --now app.service
-
-  AppAutoScalingGroup:
-    Type: AWS::AutoScaling::AutoScalingGroup
-    DependsOn: AppDefaultRoute
-    Properties:
-      VPCZoneIdentifier:
-        - !Ref AppSubnetA
-        - !Ref AppSubnetB
-      LaunchTemplate:
-        LaunchTemplateId: !Ref AppLaunchTemplate
-        Version: !GetAtt AppLaunchTemplate.LatestVersionNumber
-      MinSize: "1"
-      MaxSize: "2"
-      DesiredCapacity: "1"
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-app"
-          PropagateAtLaunch: true
 
 # Outputs
 Outputs:
