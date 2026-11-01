@@ -1,3 +1,7 @@
+# SeanDoyle-L00205287-AWS-CloudFormation-Assignment
+
+Repository of Sean Doyle - Student Number: L00205287 Assignment: AWS Cloud Formation Module: IAC for DevOps Pipelines Tutor: Ruth Lennon.
+
 ## Part 1A
 
 ### Stage 1 
