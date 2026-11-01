@@ -4,14 +4,19 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: Static website - private S3 bucket served through CloudFront with Origin Access Control
 
 Resources:
-
+# Private S3 bucket that stores the website files.
   SiteBucket:
     Type: AWS::S3::Bucket
     Properties:
+      # Bucket is intentionally private
       PublicAccessBlockConfiguration:
+        # rejects requests that try to set a public access control list
         BlockPublicAcls: true
+        # Ignore public access control lists that already exist
         IgnorePublicAcls: true
+        # Rejects bucket policies that grant public access
         BlockPublicPolicy: true
+        # If there is a public policy, access is restricted to AWS services and authorized users
         RestrictPublicBuckets: true
     # Keeps previous version of overwritten or deleted objects for recovery purposes
       VersioningConfiguration:
@@ -27,9 +32,10 @@ Resources:
         OriginAccessControlOriginType: s3
         # always: sign every request to the origin.
         SigningBehavior: always
+        # Signature Version 4 - AWS S3 request-signing method to verify the sender.
         SigningProtocol: sigv4
 
-  # CloudFront distribution is the public-facing web service where visitors connect to index.html from the private bucket
+  # CloudFront distribution - The public-facing web service where visitors connect to index.html from the private bucket
   SiteDistribution:
     Type: AWS::CloudFront::Distribution
     Properties:
@@ -45,7 +51,7 @@ Resources:
               OriginAccessIdentity: ""
         DefaultCacheBehavior:
           TargetOriginId: SiteBucketOrigin
-          # Performance: HTTP requests are redirected to HTTPS.
+          # Security: HTTP requests are redirected to HTTPS to encrypt traffic.
           ViewerProtocolPolicy: redirect-to-https
           AllowedMethods:
             - GET
